@@ -1,6 +1,11 @@
+from datetime import date
 from uuid import UUID
 
-from chores_completions.schemas import ChoresFamilyCount, DateRange, UserChoresCount
+from chores_completions.schemas import (
+    ChoresFamilyCountSchema,
+    DateRangeSchema,
+    UserChoresCountSchema,
+)
 from core.connections import get_click_house_client
 
 
@@ -8,8 +13,8 @@ class ChoreMetricRepository:
     async def get_family_members_by_chores_completions(
         self,
         family_id: UUID,
-        interval: DateRange | None = None,
-    ) -> list[UserChoresCount]:
+        interval: DateRangeSchema | None = None,
+    ) -> list[UserChoresCountSchema]:
         async_client = await get_click_house_client()
 
         condition, parameters = self.__family_date_condition_parameters(
@@ -30,15 +35,15 @@ class ChoreMetricRepository:
         )
 
         return [
-            UserChoresCount(user_id=row[0], chores_completions_counts=row[1])
+            UserChoresCountSchema(user_id=row[0], chores_completions_counts=row[1])
             for row in query_result.result_rows
         ]
 
     async def get_family_chores_by_completions(
         self,
         family_id: UUID,
-        interval: DateRange | None = None,
-    ) -> list[ChoresFamilyCount]:
+        interval: DateRangeSchema | None = None,
+    ) -> list[ChoresFamilyCountSchema]:
         async_client = await get_click_house_client()
 
         condition, parameters = self.__family_date_condition_parameters(
@@ -59,16 +64,54 @@ class ChoreMetricRepository:
         )
 
         return [
-            ChoresFamilyCount(chore_id=row[0], chores_completions_counts=row[1])
+            ChoresFamilyCountSchema(chore_id=row[0], chores_completions_counts=row[1])
             for row in query_result.result_rows
         ]
 
+    async def get_family_member_activity(
+        self,
+        completed_by_id: UUID,
+        interval: DateRangeSchema | None = None,
+    ) -> dict[date, int]:
+        async_client = await get_click_house_client()
+
+        condition, parameters = self.__user_date_condition_parameters(
+            completed_by_id, interval
+        )
+
+        query_result = await async_client.query(
+            query=f"""
+                SELECT 
+                    toDate(created_at) AS day,
+                    count(*) AS chore_completion_count
+                FROM chore_completion_stats
+                WHERE {condition}
+                GROUP BY day
+                ORDER BY day ASC
+            """,
+            parameters=parameters,
+        )
+        return {row[0]: row[1] for row in query_result.result_rows}
+
     def __family_date_condition_parameters(
-        self, family_id: UUID, interval: DateRange | None = None
-    ) -> str:
+        self, family_id: UUID, interval: DateRangeSchema | None = None
+    ) -> tuple[str, dict]:
         condition = "family_id = %(family_id)s"
         parameters = {"family_id": str(family_id)}
 
+        return self.__date_condition_parameters(condition, parameters, interval)
+
+    def __user_date_condition_parameters(
+        self, completed_by_id: UUID, interval: DateRangeSchema | None = None
+    ) -> tuple[str, dict]:
+        condition = "completed_by_id = %(completed_by_id)s"
+        parameters = {"completed_by_id": str(completed_by_id)}
+
+        return self.__date_condition_parameters(condition, parameters, interval)
+
+    def __date_condition_parameters(
+        self, condition: str, parameters: str, interval: DateRangeSchema | None = None
+    ) -> tuple[str, dict]:
         if interval:
             if interval.start and interval.end:
                 condition += " AND created_at BETWEEN %(start_date)s AND %(end_date)s"
