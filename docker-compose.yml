@@ -1,4 +1,26 @@
 services:
+    fastapi:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: web-analysis
+        volumes:
+            - ./src:/usr/src/app/src:cached
+            - ./requirements.txt:/usr/src/app/requirements.txt:cached
+        env_file:
+            - .env
+        depends_on:
+            - kafka
+            - clickhouse
+            - debezium
+        stdin_open: true
+        tty: true
+        networks:
+            - shared_network
+        ports:
+            - "8080:8080"
+        command: >
+            uvicorn src.main:app --host 0.0.0.0 --port 8080 --reload
     kafka:
         image: bitnami/kafka:latest
         container_name: kafka
@@ -35,14 +57,15 @@ services:
             - shared_network
         depends_on:
             - kafka
+        restart: always
 
     clickhouse:
         image: clickhouse/clickhouse-server:latest
         container_name: clickhouse-analysis
         environment:
-            - CLICKHOUSE_DB=default
-            - CLICKHOUSE_USER=userch
-            - CLICKHOUSE_PASSWORD=passwordch
+            - CLICKHOUSE_DB=${CLICKHOUSE_DB}
+            - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+            - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
         volumes:
             - clickhouse-data-analysis:/var/lib/clickhouse
             - ./sql:/docker-entrypoint-initdb.d 
