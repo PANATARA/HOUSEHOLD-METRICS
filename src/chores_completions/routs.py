@@ -77,7 +77,7 @@ async def family_chores_stats(
 
 
 @router.get(
-    "/stats/user/{user_id}/activity",
+    "/stats/user/{completed_by_id}/activity",
     response_model=UserActivitySchema,
     summary="Get user's daily activity",
     description=f"""
