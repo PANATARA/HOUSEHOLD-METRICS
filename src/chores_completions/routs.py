@@ -134,3 +134,27 @@ async def user_activity(
     ]
 
     return UserActivitySchema(activities=activities)
+
+
+@router.get(
+    "/stats/user/{completed_by_id}/counts",
+    response_model=UserChoresCountSchema,
+    summary="Get family chores with number of completions",
+    description=f"""
+        Returns the total number of completed chores by a specific user within a given date range.
+        - **completed_by_id** — The ID of the user whose completions are being counted.
+        {date_range_docs}
+    If the date range is not provided, all chore completions by the user will be counted.
+    """,
+)
+async def users_chores_counts(
+    completed_by_id: UUID,
+    interval: DateRangeSchema = Depends(get_date_range),
+)-> UserChoresCountSchema:
+    result = await ChoreMetricRepository().get_user_chore_completion_count(
+        completed_by_id, interval
+    )
+    return UserChoresCountSchema(
+        user_id=result[0],
+        chores_completions_counts=result[1]
+    )

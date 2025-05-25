@@ -93,6 +93,33 @@ class ChoreMetricRepository:
         )
         return {row[0]: row[1] for row in query_result.result_rows}
 
+    async def get_user_chore_completion_count(
+        self,
+        completed_by_id: UUID,
+        interval: DateRangeSchema | None = None,
+    ) -> tuple[UUID, int]:
+        async_client = await get_click_house_client()
+
+        condition, parameters = self.__user_date_condition_parameters(
+            completed_by_id, interval
+        )
+
+        query_result = await async_client.query(
+            query=f"""
+                SELECT 
+                    completed_by_id,
+                    count(*) AS completion_count
+                FROM chore_completion_stats
+                WHERE {condition}
+                GROUP BY completed_by_id
+            """,
+            parameters=parameters,
+        )
+        rows = query_result.result_rows
+        if rows:
+            return (rows[0][0], rows[0][1])
+        return (completed_by_id, 0)
+
     def __family_date_condition_parameters(
         self, family_id: UUID, interval: DateRangeSchema | None = None
     ) -> tuple[str, dict]:
@@ -110,17 +137,19 @@ class ChoreMetricRepository:
         return self.__date_condition_parameters(condition, parameters, interval)
 
     def __date_condition_parameters(
-        self, condition: str, parameters: str, interval: DateRangeSchema | None = None
+        self, condition: str, parameters: dict, interval: DateRangeSchema | None = None
     ) -> tuple[str, dict]:
         if interval:
             if interval.start and interval.end:
-                condition += " AND created_at BETWEEN %(start_date)s AND %(end_date)s"
-                parameters["start_date"] = interval.start
-                parameters["end_date"] = interval.end
+                condition += (
+                    " AND toDate(created_at) BETWEEN %(start_date)s AND %(end_date)s"
+                )
+                parameters["start_date"] = interval.start.date()
+                parameters["end_date"] = interval.end.date()
             elif interval.start:
-                condition += " AND created_at >= %(start_date)s"
-                parameters["start_date"] = interval.start
+                condition += " AND toDate(created_at) >= %(start_date)s"
+                parameters["start_date"] = interval.start.date()
             elif interval.end:
-                condition += " AND created_at <= %(end_date)s"
-                parameters["end_date"] = interval.end
+                condition += " AND toDate(created_at) <= %(end_date)s"
+                parameters["end_date"] = interval.end.date()
         return condition, parameters
