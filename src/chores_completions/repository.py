@@ -68,6 +68,31 @@ class ChoreMetricRepository:
             for row in query_result.result_rows
         ]
 
+    async def get_family_activity(
+        self,
+        family_id: UUID,
+        interval: DateRangeSchema | None = None,
+    ) -> dict[date, int]:
+        async_client = await get_click_house_client()
+
+        condition, parameters = self.__family_date_condition_parameters(
+            family_id, interval
+        )
+
+        query_result = await async_client.query(
+            query=f"""
+                SELECT 
+                    toDate(created_at) AS day,
+                    count(*) AS chore_completion_count
+                FROM chore_completion_stats
+                WHERE {condition}
+                GROUP BY day
+                ORDER BY day ASC
+            """,
+            parameters=parameters,
+        )
+        return {row[0]: row[1] for row in query_result.result_rows}
+
     async def get_family_member_activity(
         self,
         completed_by_id: UUID,
